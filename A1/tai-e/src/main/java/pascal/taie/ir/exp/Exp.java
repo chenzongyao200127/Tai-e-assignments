@@ -28,6 +28,7 @@ import java.util.List;
 
 /**
  * Representation of expressions in Tai-e IR.
+ * 这是 Tai-e 的 IR 中的一个关键接口，用于表示程序中的所有表达式
  */
 public interface Exp {
 

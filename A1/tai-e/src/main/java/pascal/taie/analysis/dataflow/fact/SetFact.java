@@ -22,6 +22,7 @@
 
 package pascal.taie.analysis.dataflow.fact;
 
+import pascal.taie.ir.exp.RValue;
 import pascal.taie.util.collection.CollectionUtils;
 import pascal.taie.util.collection.Sets;
 
@@ -44,7 +45,7 @@ public class SetFact<E> {
         set = Sets.newHybridSet(c);
     }
 
-    public SetFact() {
+    public SetFact(RValue e) {
         this(Collections.emptySet());
     }
 

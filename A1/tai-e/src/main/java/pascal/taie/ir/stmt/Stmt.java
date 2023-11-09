@@ -31,6 +31,9 @@ import java.util.Optional;
 
 /**
  * Representation of statements in Tai-e IR.
+ * 这是 Tai-e 的 IR 中的另一个关键接口，它用于表示程序中的所有语句。
+ * 对于一个典型的程序设计语言来说，每个表达式都属于某条特定的语句。
+ * 为了实现活跃变量分析，你需要获得某条语句中定义或使用的所有表达式中的变量。
  */
 public interface Stmt extends Indexable {
 

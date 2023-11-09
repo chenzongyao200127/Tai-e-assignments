@@ -27,6 +27,9 @@ import pascal.taie.analysis.graph.cfg.Edge;
 
 /**
  * Template interface for defining data-flow analysis.
+ * 这是一个抽象的数据流分析类，是具体的数据流分析与求解器之间的接口
+ * 也就是说，一个具体的数据流分析（如活跃变量分析）需要实现它的接口
+ * 而求解器（如迭代求解器）需要通过它的接口来求解数据流
  *
  * @param <Node> type of CFG nodes
  * @param <Fact> type of data-flow facts
@@ -35,23 +38,27 @@ public interface DataflowAnalysis<Node, Fact> {
 
     /**
      * @return true if this analysis is forward, otherwise false.
+     * 分析方向
      */
     boolean isForward();
 
     /**
      * @return new fact in boundary conditions, i.e., the fact for
      * entry (exit) node in forward (backward) analysis.
+     * 边界条件
      */
     Fact newBoundaryFact(CFG<Node> cfg);
 
     /**
      * @return new initial fact for non-boundary nodes.
+     * 初始条件
      */
     Fact newInitialFact();
 
     /**
      * Meets a fact into another (target) fact.
      * This function will be used to handle control-flow confluences.
+     * meet 操作
      */
     void meetInto(Fact fact, Fact target);
 
