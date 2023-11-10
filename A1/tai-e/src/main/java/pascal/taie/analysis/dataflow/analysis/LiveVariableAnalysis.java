@@ -30,10 +30,7 @@ import pascal.taie.ir.exp.RValue;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.Stmt;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * Implementation of classic live variable analysis.
@@ -55,17 +52,12 @@ public class LiveVariableAnalysis<e> extends
     // IN[exit] = Ø
     @Override
     public SetFact<Var> newBoundaryFact(CFG<Stmt> cfg) {
-        // TODO - finish me
-        var entryNode = cfg.getExit();
-
         return new SetFact<Var>(Collections.emptySet());
     }
 
     // IN[B] = Ø
     @Override
     public SetFact<Var> newInitialFact() {
-        // TODO - finish me
-
         return new SetFact<Var>(Collections.emptySet());
     }
 
@@ -74,29 +66,34 @@ public class LiveVariableAnalysis<e> extends
     // 它接受 fact 和 target 两个参数并把 fact 集合并入 target 集合。W
     @Override
     public void meetInto(SetFact<Var> fact, SetFact<Var> target) {
-        // TODO - finish me
-
         target.union(fact);
     }
 
     // IN[B] = useB U (OUT[B] - defB)
     @Override
     public boolean transferNode(Stmt stmt, SetFact<Var> in, SetFact<Var> out) {
-        // TODO - finish me
+        boolean changed = false;
+        SetFact<Var> tmp = out.copy();
 
-        List<RValue> useB = stmt.getUses();
-        Optional<LValue> defB = stmt.getDef();
+        // tmp = OUT - def
+        stmt.getDef().ifPresent(lValue -> {
+            if (lValue instanceof Var lVar) {
+                tmp.remove(lVar);
+            }
+        });
 
-        SetFact<Var> tmp = in.copy();
-
-        in.union(out);
-
-        for (RValue e: useB) {
-            in.union(new SetFact<>(e));
+        // tmp = use union (OUT - def)
+        for (RValue rValue : stmt.getUses()) {
+            if (rValue instanceof Var rVar) {
+                tmp.add(rVar);
+            }
         }
 
-        defB.ifPresent(lValue -> in.remove((Var) lValue));
+        if (!in.equals(tmp)) {
+            in.set(tmp);
+            return true;
+        }
 
-        return tmp.equals(in);
+        return false;
     }
 }
