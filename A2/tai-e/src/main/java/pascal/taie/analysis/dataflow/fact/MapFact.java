@@ -34,6 +34,8 @@ import java.util.stream.Stream;
 
 /**
  * Represents map-like data-flow facts.
+ * 这个类表示常量传播中的 data facts，即一个从变量（Var）到格上抽象值（Value）的映射。
+ * 该类提供了各种 map 相关的操作，例如键值对的查询、更新等等。
  *
  * @param <K> type of keys
  * @param <V> type of values

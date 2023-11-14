@@ -29,6 +29,7 @@ import javax.annotation.Nullable;
 
 /**
  * Representation of all definition statements, i.e., exp1 = exp2.
+ * 这是 Stmt 的一个子类。它表示了程序中所有的赋值语句，（即形如 x = y 或 x = m(…) 的语句）。
  *
  * @param <L> type of left-hand side expression
  * @param <R> type of right-hand side expression
