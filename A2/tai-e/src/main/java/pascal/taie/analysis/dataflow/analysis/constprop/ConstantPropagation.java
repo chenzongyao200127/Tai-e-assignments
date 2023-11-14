@@ -39,6 +39,7 @@ import soot.JastAddJ.Variable;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConstantPropagation extends
         AbstractDataflowAnalysis<Stmt, CPFact> {
@@ -57,23 +58,33 @@ public class ConstantPropagation extends
     // 需要注意的是：在实现 newBoundaryFact() 的时候，
     // 你要小心地处理每个会被分析的方法的参数。
     // 具体来说，你要将它们的值初始化为 NAC (请思考：为什么要这么做？)。
+//    @Override
+//    public CPFact newBoundaryFact(CFG<Stmt> cfg) {
+//        CPFact cpFact = new CPFact();
+//        for (Stmt exp : cfg) {
+//            if (exp instanceof DefinitionStmt<?, ?>) {
+//                LValue v = ((DefinitionStmt<?, ?>) exp).getLValue();
+//
+//                assert v != null;
+//                if (!ConstantPropagation.canHoldInt((Var) v)) {
+//                    continue;
+//                }
+//
+//                cpFact.update((Var) v, Value.getNAC());
+//            }
+//        }
+//
+//        return cpFact;
+//    }
     @Override
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
-        CPFact cpFact = new CPFact();
-        for (Stmt exp : cfg) {
-            if (exp instanceof DefinitionStmt<?, ?>) {
-                LValue v = ((DefinitionStmt<?, ?>) exp).getLValue();
-
-                assert v != null;
-                if (!ConstantPropagation.canHoldInt((Var) v)) {
-                    continue;
-                }
-
-                cpFact.update((Var) v, Value.getNAC());
-            }
+        CPFact fact = new CPFact();
+        for (Var var : cfg.getIR().getParams()) {
+            if (canHoldInt(var))
+                fact.update(var, Value.getNAC());
         }
 
-        return cpFact;
+        return fact;
     }
 
     @Override
@@ -97,13 +108,9 @@ public class ConstantPropagation extends
 
     @Override
     public void meetInto(CPFact fact, CPFact target) {
-        fact.entries().forEach(entry -> {
-            Var v = entry.getKey();
-            Value factValue = entry.getValue();
-            Value targetValue = target.get(v);
-            Value newValue = targetValue == Value.getUndef() ? factValue : meetValue(factValue, targetValue);
-            target.update(v, newValue);
-        });
+        fact.forEach(((var, value) -> {
+            target.update(var, meetValue(value, target.get(var)));
+        }));
     }
 
 
@@ -113,54 +120,72 @@ public class ConstantPropagation extends
      * 你应当在 meetInto() 方法中调用它。
      * 1. NAC ⊓ Any = NAC
      * 2. UNDEF ⊓ Any = Any
-     * 3. c ⊓ v = c (if c == v)
-     * 4. c ⊓ v = NAC (if c != v)
-     * 5. c ⊓ c = c
-     * 6. c1 ⊓ c2 = NAC
+     * 3. c ⊓ c = c
+     * 4. c1 ⊓ c2 = NAC
      */
+    // IN[B] = ⊔ P a predecessor of B OUT[P]
     public Value meetValue(Value v1, Value v2) {
-        // Return NAC if either value is NAC
+        // If either value is NAC, the result is NAC
         if (v1.isNAC() || v2.isNAC()) {
             return Value.getNAC();
         }
 
-        // Return UNDEF only if both values are UNDEF
-        if (v1.isUndef() && v2.isUndef()) {
-            return Value.getUndef();
-        }
-
-        // If both values are constants, return a constant or NAC
+        // If both values are constants
         if (v1.isConstant() && v2.isConstant()) {
-            return v1.getConstant() == v2.getConstant() ?
-                    Value.makeConstant(v1.getConstant()) : Value.getNAC();
+            return v1.equals(v2) ? Value.makeConstant(v1.getConstant()) : Value.getNAC();
         }
 
-        // If none of the above conditions are met, return NAC
+        // If one value is constant and the other is undefined, return the constant
+        if (v1.isConstant() && v2.isUndef() || v2.isConstant() && v1.isUndef()) {
+            return Value.makeConstant(v1.isConstant() ? v1.getConstant() : v2.getConstant());
+        }
+
+        // In all other cases, return NAC
         return Value.getNAC();
     }
 
 
-    // return True if inFact is changed
+//    @Override
+//    public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
+//        AtomicBoolean changed = new AtomicBoolean(false);
+//
+//        // Update out with values from in, set changed if any updates were made
+//        in.forEach((var, value) -> {
+//            if (out.update(var, value)) {
+//                changed.set(true);
+//            }
+//        });
+//
+//        // Handle DefinitionStmt
+//        if (stmt instanceof DefinitionStmt<?, ?> s && s.getLValue() instanceof Var var && canHoldInt(var)) {
+//            Value originalVal = out.get(var);           // Get the original value of var in out
+//            Value newVal = evaluate(s.getRValue(), in); // Evaluate the right-hand side of the statement
+//            out.update(var, newVal);                    // Update out with the new value
+//
+//            // Check if newVal is different from the original value of var in out
+//            if (originalVal == null || !originalVal.equals(newVal)) {
+//                changed.set(true);
+//            }
+//        }
+//
+//        return changed.get();
+//    }
+
+    // OUT[B] = genB U (IN[B] - killB);
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
-        CPFact newOut = in.copy();
+        if (stmt instanceof DefinitionStmt<?, ?> definitionStmt) {
+            LValue lValue = definitionStmt.getLValue();
+            RValue rValue = definitionStmt.getRValue();
 
-        if (stmt instanceof DefinitionStmt<?,?>) {
-            LValue lValue = ((DefinitionStmt<?, ?>) stmt).getLValue();
-            if (lValue instanceof Var && ConstantPropagation.canHoldInt((Var) lValue)) {
-                Value evaluatedValue = evaluate(lValue, in);
-                newOut.update((Var) lValue, evaluatedValue);
+            if (lValue instanceof Var lVar && canHoldInt(lVar)) {
+                CPFact tf = in.copy();
+                tf.update(lVar, evaluate(rValue, in));
+                return out.copyFrom(tf);
             }
         }
-
-        boolean hasChanged = !newOut.equals(out);
-        if (hasChanged) {
-            out.copyFrom(newOut);
-        }
-
-        return hasChanged;
+        return out.copyFrom(in);
     }
-
 
     /**
      * @return true if the given variable can hold integer value, otherwise false.

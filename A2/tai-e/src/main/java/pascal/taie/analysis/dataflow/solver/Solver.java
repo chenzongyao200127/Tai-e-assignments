@@ -80,12 +80,15 @@ public abstract class Solver<Node, Fact> {
         // OUT[entry] = ∅;
         Node entry = cfg.getEntry();
         result.setInFact(entry, analysis.newBoundaryFact(cfg));
+        result.setOutFact(entry, analysis.newBoundaryFact(cfg)); // Attention!(一开始漏了)
 
         // for (each basic block B\entry)
         //     OUT[B] = ∅;
         for (Node node: cfg) {
-            result.setInFact(node, analysis.newInitialFact());
-            result.setOutFact(node, analysis.newInitialFact());
+            if (!node.equals(entry)) {
+                result.setInFact(node, analysis.newInitialFact());
+                result.setOutFact(node, analysis.newInitialFact());
+            }
         }
     }
 
