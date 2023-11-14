@@ -216,6 +216,7 @@ public class ConstantPropagation extends
      * @param in  IN fact of the statement
      * @return the resulting {@link Value}
      */
+    // 还是有BUG
     public static Value evaluate(Exp exp, CPFact in) {
         // x = c (c is constant)
         if (exp instanceof IntLiteral c) {
