@@ -30,6 +30,15 @@ import java.util.Set;
 
 /**
  * Default implementation of call graph.
+ *
+ * 该类代表了程序的调用图。它提供了多样的 API（继承自类 AbstractCallGraph）
+ * 来获取到调用图的信息。另外，它还提供了一些修改调用图的 API，你可以借此来建立调用图。
+ *
+ * - Stream<Invoke> callSitesIn(JMethod)：返回给定方法 JMethod 中的所有 call sites。
+ * - boolean contains(JMethod): 返回当前调用图是否含有给定的方法，即给定方法 JMethod
+ *   在当前调用图中是否可达。
+ * - boolean addReachableMethod(JMethod): 向当前调用图中添加方法 JMethod 并将方法标记成可达的。
+ * - boolean addEdge(Edge<Invoke,JMethod>): 向当前调用图中添加一条调用边。
  */
 public class DefaultCallGraph extends AbstractCallGraph<Invoke, JMethod> {
 

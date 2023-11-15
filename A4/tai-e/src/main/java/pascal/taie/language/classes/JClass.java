@@ -40,6 +40,8 @@ import java.util.stream.Collectors;
  * Represents classes in the program. Each instance contains various
  * information of a class, including class name, modifiers, declared
  * methods and fields, etc.
+ * 该类表示 Tai-e 中的 Java 类。
+ * 每个 JClass 的实例关联着一个类并包含该类的各种信息。
  */
 public class JClass extends AbstractResultHolder implements Annotated {
 
@@ -168,6 +170,8 @@ public class JClass extends AbstractResultHolder implements Annotated {
         return Modifier.hasSynthetic(modifiers);
     }
 
+    // 返回该类的父类。如果这个类在类层次结构的顶端（没有父类），
+    // 比如 java.lang.Object，则返回 null。
     public @Nullable
     JClass getSuperClass() {
         return superClass;
@@ -200,6 +204,9 @@ public class JClass extends AbstractResultHolder implements Annotated {
 
     /**
      * Attempts to retrieve the method with the given name.
+     *
+     * JMethod getDeclaredMethod(Subsignature): 根据子签名返回该类中声明的对应方法。
+     * 如果该类中没有该子签名对应的方法，则返回 null。
      *
      * @throws AmbiguousMethodException if this class has multiple methods
      *                                  with the given name.

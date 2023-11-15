@@ -42,6 +42,9 @@ import java.util.Optional;
 
 /**
  * Representation of invocation statement, e.g., r = o.m(...) or o.m(...).
+ * 该类表示程序中的方法调用（举个例子：x = o.m(a1,a2,…)）以及调用图中的调用点。
+ * 它提供了一些 API 来获取调用点的各种信息。
+ * 明确一点：你需要使用 getMethodRef() 来获取目标方法的签名信息。
  */
 public class Invoke extends DefinitionStmt<Var, InvokeExp>
         implements Comparable<Invoke> {

@@ -40,6 +40,9 @@ import java.util.Set;
  * Represents methods in the program. Each instance contains various
  * information of a method, including method name, signature, declaring class,
  * method body (IR), etc.
+ *
+ * 该类表示 Tai-e 中的 Java 方法。
+ * 每个 JMethod 的实例关联着一个方法并包含该方法的各种信息。
  */
 public class JMethod extends ClassMember {
 
@@ -77,6 +80,8 @@ public class JMethod extends ClassMember {
         this.methodSource = methodSource;
     }
 
+    // boolean isAbstract(): 如果该 JMethod 是一个没有方法体的抽象方法，
+    // 则返回 true，否则返回 false；
     public boolean isAbstract() {
         return Modifier.hasAbstract(modifiers);
     }

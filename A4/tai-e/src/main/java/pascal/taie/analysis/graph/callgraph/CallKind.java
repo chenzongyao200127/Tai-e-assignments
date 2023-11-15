@@ -25,8 +25,11 @@ package pascal.taie.analysis.graph.callgraph;
 public enum CallKind {
     // regular calls
     INTERFACE,
+    // invokeinterface, invokevirtual (Other instance methods)
     VIRTUAL,
+    // invokespecial (Constructors, Private instance methods, Superclass instance methods)
     SPECIAL,
+    // invokestatic (Static methods)
     STATIC,
     DYNAMIC,
     /**

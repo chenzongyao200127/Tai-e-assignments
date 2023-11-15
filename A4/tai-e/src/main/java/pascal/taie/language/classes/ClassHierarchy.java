@@ -62,16 +62,19 @@ public interface ClassHierarchy {
 
     /**
      * @return the direct subinterfaces of given interface.
+     * 对于一个给定接口，返回直接实现了该接口的类。
      */
     Collection<JClass> getDirectSubinterfacesOf(JClass jclass);
 
     /**
      * @return the direct implementors of given interface.
+     * 对于一个给定接口，返回直接继承该接口的子接口。
      */
     Collection<JClass> getDirectImplementorsOf(JClass jclass);
 
     /**
      * @return the direct subclasses of given class.
+     * 对于给定类，返回直接继承该类的子类。
      */
     Collection<JClass> getDirectSubclassesOf(JClass jclass);
 

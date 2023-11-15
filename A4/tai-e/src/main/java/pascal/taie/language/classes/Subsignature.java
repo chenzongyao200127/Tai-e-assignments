@@ -32,6 +32,10 @@ import java.util.concurrent.ConcurrentMap;
 
 /**
  * Method name and descriptor.
+ * 该类表示 Tai-e 中的子签名。一个方法的子签名只包含它的方法名和方法签名的描述符
+ * 举个例子，下面方法 foo 的子签名是：“T foo(P,Q,R)” ，而它的完整签名是：“<C: T foo(P,Q,R)>”。
+ * Signature = class type + method name + descriptor
+ * Descriptor = return type + parameter types
  */
 @InternalCanonicalized
 public class Subsignature {

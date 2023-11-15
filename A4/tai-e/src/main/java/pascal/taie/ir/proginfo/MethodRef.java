@@ -43,6 +43,12 @@ import static pascal.taie.language.classes.ClassNames.VAR_HANDLE;
 
 /**
  * Represents method references in IR.
+ * Tai-e 中的目标方法引用，如调用点的目标方法。
+ * 它包含了调用点所调用的目标方法的签名信息。
+ *
+ * JClass getDeclaringClass()：返回该方法签名的声明类，即声明该方法的类。
+ * (也就是第 7 讲课件的第 24 页中所描述的 class type);
+ * Subsignature getSubsignature()：返回被调用方法的子签名（subsignature）。
  */
 @InternalCanonicalized
 public class MethodRef extends MemberRef {
