@@ -205,106 +205,212 @@ public class ConstantPropagation extends
         return false;
     }
 
-    /**
-     * Evaluates the {@link Value} of given expression.
-     * 这个方法会计算表达式（Exp）的值（Value）。当然，此处的值是格上的抽象值。
-     * 你需要参考第 6 讲课件的第 247 页上的内容来实现它的三种情况。
-     * 对于其它情况，该方法会像我们在第 2.1 节提到的那样返回 NAC。
-     * 你应该在 transferNode() 方法中调用它来进行表达式的求值。
-     *
-     * @param exp the expression to be evaluated
-     * @param in  IN fact of the statement
-     * @return the resulting {@link Value}
-     */
-    // 还是有BUG
+//    /**
+//     * Evaluates the {@link Value} of given expression.
+//     * 这个方法会计算表达式（Exp）的值（Value）。当然，此处的值是格上的抽象值。
+//     * 你需要参考第 6 讲课件的第 247 页上的内容来实现它的三种情况。
+//     * 对于其它情况，该方法会像我们在第 2.1 节提到的那样返回 NAC。
+//     * 你应该在 transferNode() 方法中调用它来进行表达式的求值。
+//     *
+//     * @param exp the expression to be evaluated
+//     * @param in  IN fact of the statement
+//     * @return the resulting {@link Value}
+//     */
+//    // 还是有BUG
+//    public static Value evaluate(Exp exp, CPFact in) {
+//        // x = c (c is constant)
+//        if (exp instanceof IntLiteral c) {
+//            return Value.makeConstant(c.getValue());
+//
+//            // x = y op z
+//        } else if (exp instanceof BinaryExp binaryExp) {
+//            Var v1 = binaryExp.getOperand1();
+//            Var v2 = binaryExp.getOperand2();
+//            Value v1Value = in.get(v1);
+//            Value v2Value = in.get(v2);
+//
+//            // Check for null or NAC values
+//            if (v1Value == null || v2Value == null || v1Value.isNAC() || v2Value.isNAC()) {
+//                return Value.getNAC();
+//            }
+//
+//            // Check if both values are constants
+//            if (!v1Value.isConstant() || !v2Value.isConstant()) {
+//                return Value.getNAC();
+//            }
+//
+//            int val1 = v1Value.getConstant();
+//            int val2 = v2Value.getConstant();
+//
+//            // Handle different types of binary expressions
+//            if (binaryExp instanceof ArithmeticExp) {
+//                ArithmeticExp.Op op = ((ArithmeticExp) binaryExp).getOperator();
+//                String opStr = op.toString();
+//
+//                // Division or modulo by zero results in UNDEF
+//                if (("/".equals(opStr) || "%".equals(opStr)) && val2 == 0) {
+//                    return Value.getUndef();
+//                }
+//
+//                return switch (opStr) {
+//                    case "+" -> Value.makeConstant(val1 + val2);
+//                    case "-" -> Value.makeConstant(val1 - val2);
+//                    case "*" -> Value.makeConstant(val1 * val2);
+//                    case "/" -> Value.makeConstant(val1 / val2);
+//                    case "%" -> Value.makeConstant(val1 % val2);
+//                    default -> throw new IllegalStateException("Unsupported arithmetic operator: " + opStr);
+//                };
+//
+//            } else if (binaryExp instanceof ConditionExp) {
+//                ConditionExp.Op op = ((ConditionExp) binaryExp).getOperator();
+//                String opStr = op.toString();
+//
+//                return switch (opStr) {
+//                    case "<=" -> val1 <= val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+//                    case "<" -> val1 < val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+//                    case ">" -> val1 > val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+//                    case ">=" -> val1 >= val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+//                    case "==" -> val1 == val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+//                    case "!=" -> val1 != val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+//                    default -> throw new IllegalStateException("Unsupported conditional operator: " + opStr);
+//                };
+//
+//            } else if (binaryExp instanceof ShiftExp) {
+//                ShiftExp.Op op = ((ShiftExp) binaryExp).getOperator();
+//                String opStr = op.toString();
+//
+//                return switch (opStr) {
+//                    case "<<" -> Value.makeConstant(val1 << val2);
+//                    case ">>" -> Value.makeConstant(val1 >> val2);
+//                    case ">>>" -> Value.makeConstant(val1 >>> val2);
+//                    default -> throw new IllegalStateException("Unsupported shift operator: " + opStr);
+//                };
+//
+//            } else if (binaryExp instanceof BitwiseExp) {
+//                BitwiseExp.Op op = ((BitwiseExp) binaryExp).getOperator();
+//                String opStr = op.toString();
+//
+//                return switch (opStr) {
+//                    case "|" -> Value.makeConstant(val1 | val2);
+//                    case "^" -> Value.makeConstant(val1 ^ val2);
+//                    case "&" -> Value.makeConstant(val1 & val2);
+//                    default -> throw new IllegalStateException("Unsupported bitwise operator: " + opStr);
+//                };
+//            } else {
+//                return Value.getNAC();
+//            }
+//        // x = v
+//        } else if (exp instanceof Var v) {
+//            return in.get(v);
+//        } else {
+//            return Value.getNAC();
+//        }
+//    }
+
     public static Value evaluate(Exp exp, CPFact in) {
-        // x = c (c is constant)
-        if (exp instanceof IntLiteral c) {
-            return Value.makeConstant(c.getValue());
+        if (exp instanceof IntLiteral intExp) {
+            return Value.makeConstant(intExp.getValue());
+        }
+        if (exp instanceof Var varExp) {
+            return in.get(varExp);
+        }
 
-            // x = y op z
-        } else if (exp instanceof BinaryExp binaryExp) {
-            Var v1 = binaryExp.getOperand1();
-            Var v2 = binaryExp.getOperand2();
-            Value v1Value = in.get(v1);
-            Value v2Value = in.get(v2);
-
-            // Check for null or NAC values
-            if (v1Value == null || v2Value == null || v1Value.isNAC() || v2Value.isNAC()) {
-                return Value.getNAC();
-            }
-
-            // Check if both values are constants
-            if (!v1Value.isConstant() || !v2Value.isConstant()) {
-                return Value.getNAC();
-            }
-
-            int val1 = v1Value.getConstant();
-            int val2 = v2Value.getConstant();
-
-            // Handle different types of binary expressions
-            if (binaryExp instanceof ArithmeticExp) {
-                ArithmeticExp.Op op = ((ArithmeticExp) binaryExp).getOperator();
-                String opStr = op.toString();
-
-                // Division or modulo by zero results in UNDEF
-                if (("/".equals(opStr) || "%".equals(opStr)) && val2 == 0) {
-                    return Value.getUndef();
-                }
-
-                return switch (opStr) {
-                    case "+" -> Value.makeConstant(val1 + val2);
-                    case "-" -> Value.makeConstant(val1 - val2);
-                    case "*" -> Value.makeConstant(val1 * val2);
-                    case "/" -> Value.makeConstant(val1 / val2);
-                    case "%" -> Value.makeConstant(val1 % val2);
-                    default -> throw new IllegalStateException("Unsupported arithmetic operator: " + opStr);
-                };
-
-            } else if (binaryExp instanceof ConditionExp) {
-                ConditionExp.Op op = ((ConditionExp) binaryExp).getOperator();
-                String opStr = op.toString();
-
-                return switch (opStr) {
-                    case "<=" -> val1 <= val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-                    case "<" -> val1 < val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-                    case ">" -> val1 > val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-                    case ">=" -> val1 >= val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-                    case "==" -> val1 == val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-                    case "!=" -> val1 != val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-                    default -> throw new IllegalStateException("Unsupported conditional operator: " + opStr);
-                };
-
-            } else if (binaryExp instanceof ShiftExp) {
-                ShiftExp.Op op = ((ShiftExp) binaryExp).getOperator();
-                String opStr = op.toString();
-
-                return switch (opStr) {
-                    case "<<" -> Value.makeConstant(val1 << val2);
-                    case ">>" -> Value.makeConstant(val1 >> val2);
-                    case ">>>" -> Value.makeConstant(val1 >>> val2);
-                    default -> throw new IllegalStateException("Unsupported shift operator: " + opStr);
-                };
-
-            } else if (binaryExp instanceof BitwiseExp) {
-                BitwiseExp.Op op = ((BitwiseExp) binaryExp).getOperator();
-                String opStr = op.toString();
-
-                return switch (opStr) {
-                    case "|" -> Value.makeConstant(val1 | val2);
-                    case "^" -> Value.makeConstant(val1 ^ val2);
-                    case "&" -> Value.makeConstant(val1 & val2);
-                    default -> throw new IllegalStateException("Unsupported bitwise operator: " + opStr);
-                };
-            } else {
-                return Value.getNAC();
-            }
-
-        } else if (exp instanceof Var v) {
-            return in.get(v);
-
-        } else {
+        if (!(exp instanceof BinaryExp binaryExp)) {
             return Value.getNAC();
         }
+
+        Var op1 = binaryExp.getOperand1(), op2 = binaryExp.getOperand2();
+        Value op1Val = in.get(op1), op2Val = in.get(op2);
+        BinaryExp.Op op = binaryExp.getOperator();
+
+        if (!op1Val.isConstant() || !op2Val.isConstant()) {
+            return handleNonConstantOperands(binaryExp, op2Val);
+        }
+
+        return computeBinaryOperation(binaryExp, op1Val, op2Val, op);
     }
+
+    // case: !op1Val.isConstant() || !op2Val.isConstant()
+    private static Value handleNonConstantOperands(BinaryExp binaryExp, Value op2Val) {
+        BinaryExp.Op op = binaryExp.getOperator();
+        if (binaryExp instanceof ArithmeticExp && (op == ArithmeticExp.Op.DIV || op == ArithmeticExp.Op.REM)) {
+            // 0 / 0 => UNDEF
+            if (op2Val.isConstant() && op2Val.getConstant() == 0) {
+                return Value.getUndef();
+            }
+        }
+        return Value.getNAC();
+    }
+
+    private static Value computeBinaryOperation(BinaryExp binaryExp, Value op1Val, Value op2Val, BinaryExp.Op op) {
+        String opStr = op.toString();
+        int val1 = op1Val.getConstant();
+        int val2 = op2Val.getConstant();
+
+        switch (opStr) {
+            case "+" -> {
+                return Value.makeConstant(val1 + val2);
+            }
+            case "-" -> {
+                return Value.makeConstant(val1 - val2);
+            }
+            case "*" -> {
+                return Value.makeConstant(val1 * val2);
+            }
+            case "/" -> {
+                return val1 == 0 ? Value.getUndef() :
+                        Value.makeConstant(val1 / val2);
+            }
+            case "%" -> {
+                return val1 == 0 ? Value.getUndef() :
+                        Value.makeConstant(val1 % val2);
+            }
+
+            case "<=" -> {
+                return val1 <= val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+            }
+            case "<" -> {
+                return val1 < val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+            }
+            case ">" -> {
+                return val1 > val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+            }
+            case ">=" -> {
+                return val1 >= val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+            }
+            case "==" -> {
+                return val1 == val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+            }
+            case "!=" -> {
+                return val1 != val2 ? Value.makeConstant(1) : Value.makeConstant(0);
+            }
+
+
+            case "|" -> {
+                return Value.makeConstant(val1 | val2);
+            }
+            case "^" -> {
+                return Value.makeConstant(val1 ^ val2);
+            }
+            case "&" -> {
+                return Value.makeConstant(val1 & val2);
+            }
+
+
+            case "<<" -> {
+                return Value.makeConstant(val1 << val2);
+            }
+            case ">>" -> {
+                return Value.makeConstant(val1 >> val2);
+            }
+            case ">>>" -> {
+                return Value.makeConstant(val1 >>> val2);
+            }
+
+            default -> {
+                return Value.getUndef();
+            }
+        }
+    }
+
 }
