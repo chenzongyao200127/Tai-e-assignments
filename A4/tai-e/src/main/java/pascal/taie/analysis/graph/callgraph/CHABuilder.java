@@ -53,7 +53,6 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
     private CallGraph<Invoke, JMethod> buildCallGraph(JMethod entry) {
         DefaultCallGraph callGraph = new DefaultCallGraph();
         callGraph.addEntryMethod(entry);
-        // TODO - finish me
 
         // Work list, containing the methods to be processed
         Queue<JMethod> wl = new ArrayDeque<>();
@@ -97,45 +96,6 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
      *          add Dispatch(c', m) to T
      * return T
      */
-//    private Set<JMethod> resolve(Invoke callSite) {
-//        // TODO - finish me
-//
-//        Set<JMethod> set = new HashSet<>();
-//        MethodRef methodRef = callSite.getMethodRef();
-//
-//        switch (CallGraphs.getCallKind(callSite)) {
-//            case STATIC -> {
-//                set.add(methodRef.getDeclaringClass()
-//                        .getDeclaredMethod(methodRef.getSubsignature()));
-//            }
-//
-//            case SPECIAL -> {
-//                Optional.ofNullable(dispatch(methodRef.getDeclaringClass(),
-//                        methodRef.getSubsignature()))
-//                        .ifPresent(set::add);
-//            }
-//
-//            case VIRTUAL, INTERFACE -> {
-//                JClass cm = methodRef.getDeclaringClass();
-//                Queue<JClass> queue = new ArrayDeque<>();
-//                queue.add(cm);
-//
-//                while (!queue.isEmpty()) {
-//                    // itself
-//                    JClass c = queue.poll();
-//                    Optional.ofNullable(dispatch(c, methodRef.getSubsignature()))
-//                            .ifPresent(set::add);
-//
-//                    // each c that is a subclass of c
-//                    if (c.isInterface()) {
-//                        queue.addAll(hierarchy.getDirectImplementorsOf(c));
-//                    }
-//                }
-//            }
-//        }
-//
-//        return set;
-//    }
     private Set<JMethod> resolve(Invoke callSite) {
         Set<JMethod> t = new HashSet<>();
         MethodRef m = callSite.getMethodRef();
@@ -174,17 +134,6 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
      * @return the dispatched target method, or null if no satisfying method
      * can be found.
      */
-//    private JMethod dispatch(JClass jclass, Subsignature subsignature) {
-//        // TODO - finish me
-//
-//        JMethod method = jclass.getDeclaredMethod(subsignature);
-//        if (method != null) {
-//            return method;
-//        }
-//        JClass superClass = jclass.getSuperClass();
-//        return (superClass == null) ? null : dispatch(superClass, subsignature);
-//    }
-
     private JMethod dispatch(JClass jclass, Subsignature subsignature) {
         // JClass could be null
         if (jclass == null) {
