@@ -65,45 +65,27 @@ class InterSolver<Method, Node, Fact> {
             result.setOutFact(icfg.getEntryOf(method), analysis.newBoundaryFact(icfg.getEntryOf(method)));
         }));
         for (Node node : icfg) {
-            if (result.getOutFact(node) == null) {
-                result.setOutFact(node, analysis.newInitialFact());
-            }
+            result.setOutFact(node, analysis.newInitialFact());
         }
     }
 
-//    private void doSolve() {
-//        Queue<Node> workList = new LinkedList<>();
-//
-//        // WorkList ← all basic blocks
-//        for (Node node: icfg) {
-//            workList.add(node);
-//        }
-//
-//        while (!workList.isEmpty()) {
-//            Node curNode = workList.poll();
-//            Set<Node> predecessors = icfg.getPredsOf(curNode);
-//            for (Node pre: predecessors) {
-//                analysis.meetInto(result.getOutFact(pre), result.getInFact(curNode));
-//            }
-//            if (analysis.transferNode(curNode, result.getInFact(curNode), result.getOutFact(curNode))) {
-//                workList.addAll(icfg.getSuccsOf(curNode));
-//            }
-//        }
-//    }
     private void doSolve() {
-        workList = new ArrayDeque<>();
-        for (Node node : icfg) {
+        Queue<Node> workList = new LinkedList<>();
+
+        // WorkList ← all basic blocks
+        for (Node node: icfg) {
             workList.add(node);
         }
+
         while (!workList.isEmpty()) {
-            Node p = workList.remove();
+            Node curNode = workList.poll();
             Fact in = analysis.newInitialFact();
-            icfg.getInEdgesOf(p).forEach(edge -> analysis.meetInto(analysis.transferEdge(edge, result.getOutFact(edge.getSource())), in));
-            result.setInFact(p, in);
-            if (analysis.transferNode(p, in, result.getOutFact(p))) {
-                workList.addAll(icfg.getSuccsOf(p));
+            icfg.getInEdgesOf(curNode).forEach(nodeICFGEdge -> {
+                analysis.meetInto(analysis.transferEdge(nodeICFGEdge, result.getOutFact(nodeICFGEdge.getSource())), in);
+            });
+            if (analysis.transferNode(curNode, in, result.getOutFact(curNode))) {
+                workList.addAll(icfg.getSuccsOf(curNode));
             }
         }
     }
-
 }

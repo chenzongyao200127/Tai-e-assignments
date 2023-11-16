@@ -83,9 +83,14 @@ public class InterConstantPropagation extends
     // OUT[B] = genB U (IN[B] - killB - killParam)
     @Override
     protected boolean transferCallNode(Stmt stmt, CPFact in, CPFact out) {
-        boolean flag = in.equals(out);
-        out.copyFrom(in);
-        return !flag;
+        if (in.equals(out)) {
+            // If in and out are already equal, no change is made.
+            return false;
+        } else {
+            // If they are different, copy in to out and indicate a change has occurred.
+            out.copyFrom(in);
+            return true;
+        }
     }
 
     @Override
@@ -111,7 +116,6 @@ public class InterConstantPropagation extends
 
     @Override
     protected CPFact transferCallEdge(CallEdge<Stmt> edge, CPFact callSiteOut) {
-        // TODO - finish me
         CPFact out = new CPFact();
         if (edge.getSource() instanceof Invoke invoke) {
             InvokeExp invokeExp = invoke.getInvokeExp();
