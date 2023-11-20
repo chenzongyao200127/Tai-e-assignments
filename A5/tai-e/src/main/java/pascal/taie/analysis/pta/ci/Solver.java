@@ -124,8 +124,10 @@ class Solver {
      *              AddEdge(y, x)
      */
     private void addReachable(JMethod method) {
+        // add m to RM
         if (callGraph.addReachableMethod(method)) {
             for (Stmt stmt : method.getIR().getStmts()) {
+                // **访问者模式**
                 stmt.accept(stmtProcessor);
             }
         }
@@ -339,12 +341,12 @@ class Solver {
     /**
      * Processes instance calls when points-to set of the receiver variable changes.
      * 这个方法实现了第 10 讲课件第 124 页中的 ProcessCall 函数。
-     *
+     * <p>
      * 你将在这个方法中处理所有种类的实例方法调用，即虚调用、接口调用和特殊调用。
      * 处理接口调用和特殊调用的逻辑与处理虚调用的逻辑完全相同（你在课上已经学过）。
      * 你也可以使用上面提到的 `resolveCallee()` （代替算法中的 Dispatch）来解析所有种类的实例方法调用，
      * 即虚调用、接口调用和特殊调用。
-     *
+     * <p>
      * 为了保证 soundness，你应该将一个方法中由返回变量（即返回语句中出现的变量）
      * 所指向的所有对象传播给其调用点等号左侧的变量。
      * 你可以通过相关的 IR 对象获得一个方法的所有返回变量。
