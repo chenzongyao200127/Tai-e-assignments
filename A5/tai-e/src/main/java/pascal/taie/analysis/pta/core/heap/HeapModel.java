@@ -32,6 +32,11 @@ public interface HeapModel {
 
     /**
      * @return the abstract object for given new statement.
+     * 这个类表示堆模型（即堆抽象），它用来对堆对象进行建模。
+     * 给定一个 New 语句（即创建点 allocation site），
+     * 你可以使用 HeapModel 的 getObj(New) 方法来获得与它对应的抽象对象（即 Obj）。
+     * 因为我们采用了第 8 讲课件第 44 页中介绍的创建点抽象，
+     * 所以该方法为每个 New 语句返回一个唯一的抽象对象。
      */
     Obj getObj(New allocSite);
 
