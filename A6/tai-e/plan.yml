@@ -14,3 +14,11 @@
     algorithm: cspta
     action: dump
     file: null
+
+#  ci：非上下文敏感（已实现好且可以直接使用）
+#  1-call：一层调用点敏感
+#  1-obj：一层对象敏感
+#  1-type：一层类型敏感
+#  2-call：两层调用点敏感
+#  2-obj：两层对象敏感
+#  2-type：两层类型敏感

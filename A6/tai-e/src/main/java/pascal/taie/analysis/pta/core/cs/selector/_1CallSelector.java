@@ -40,21 +40,21 @@ public class _1CallSelector implements ContextSelector {
         return ListContext.make();
     }
 
+    // Selects contexts for static methods.
     @Override
     public Context selectContext(CSCallSite callSite, JMethod callee) {
-        // TODO - finish me
-        return null;
+        return ListContext.make(callSite.getContext());
     }
 
+    // Selects contexts for instance methods.
     @Override
     public Context selectContext(CSCallSite callSite, CSObj recv, JMethod callee) {
-        // TODO - finish me
-        return null;
+        return ListContext.make(callSite.getContext());
     }
 
+    // Selects heap contexts for new-created abstract objects.
     @Override
     public Context selectHeapContext(CSMethod method, Obj obj) {
-        // TODO - finish me
-        return null;
+        return ListContext.make();
     }
 }
