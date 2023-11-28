@@ -249,11 +249,15 @@ class Solver {
         }
     }
 
-    /**
+    /*
      * Adds an edge "source -> target" to the PFG.
      */
     private void addPFGEdge(Pointer source, Pointer target) {
-        // TODO - finish me
+        if (pointerFlowGraph.addEdge(source, target)) {
+            if (!source.getPointsToSet().isEmpty()) {
+                workList.addEntry(target, source.getPointsToSet());
+            }
+        }
     }
 
     /**
@@ -266,10 +270,23 @@ class Solver {
     /**
      * Propagates pointsToSet to pt(pointer) and its PFG successors,
      * returns the difference set of pointsToSet and pt(pointer).
+     * Propagate(n, pts):
+     *   if pts is not empty then:
+     *     pt(n) U= pts
+     *     foreach n -> s ∈ PFG:
+     *       add {s, pts} to WL
      */
     private PointsToSet propagate(Pointer pointer, PointsToSet pointsToSet) {
-        // TODO - finish me
-        return null;
+        PointsToSet delta = PointsToSetFactory.make();
+        if (!pointsToSet.isEmpty()) {
+            for (CSObj obj: pointsToSet) {
+                if (pointer.getPointsToSet().addObject(obj)) {
+                    delta.addObject(obj);
+                }
+            }
+            pointerFlowGraph.getSuccsOf(pointer).forEach(s -> workList.addEntry(s, delta));
+        }
+        return delta;
     }
 
     /**
