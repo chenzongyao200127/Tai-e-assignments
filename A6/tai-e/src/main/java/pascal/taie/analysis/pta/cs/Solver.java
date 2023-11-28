@@ -137,27 +137,22 @@ class Solver {
         // TODO - if you choose to implement addReachable()
         //  via visitor pattern, then finish me
 
-        private Set<Stmt> stmtSet;
 
         private StmtProcessor(CSMethod csMethod) {
             this.csMethod = csMethod;
             this.context = csMethod.getContext();
-            this.stmtSet = new HashSet<>();
         }
 
         // Constructor for StmtProcessor. Initializes the set of statements.
 
-        // checks if statements is already in the set
-        public boolean contains(Stmt stmt) {
-            return stmtSet.contains(stmt);
-        }
 
         // Process `New`
         @Override
         public Void visit(New stmt) {
+            Obj obj = heapModel.getObj(stmt);
             workList.addEntry(
                     csManager.getCSVar(context, stmt.getLValue()),
-                    PointsToSetFactory.make(csManager.getCSObj(context, heapModel.getObj(stmt)))
+                    PointsToSetFactory.make(csManager.getCSObj(contextSelector.selectHeapContext(csMethod, obj), obj))
             );
             return StmtVisitor.super.visit(stmt);
         }
@@ -188,7 +183,7 @@ class Solver {
                         csManager.getCSMethod(ct, method)
                 ))) {
                     // c:ai -> ct: m_pi
-                    addReachable(csManager.getCSMethod(context, method));
+                    addReachable(csManager.getCSMethod(ct, method));
                     for (int i = 0; i < method.getParamCount(); ++i) {
                         Var a = stmt.getInvokeExp().getArg(i);
                         Var p = method.getIR().getParam(i);
@@ -244,7 +239,6 @@ class Solver {
         // Adds the statement to the set.
         @Override
         public Void visitDefault(Stmt stmt) {
-            stmtSet.add(stmt);
             return StmtVisitor.super.visitDefault(stmt);
         }
     }
@@ -266,61 +260,36 @@ class Solver {
     private void analyze() {
         while (!workList.isEmpty()) {
             WorkList.Entry entry = workList.pollEntry();
-
-            // Δ = pts – pt(n)
             PointsToSet delta = propagate(entry.pointer(), entry.pointsToSet());
-
-            if (entry.pointer() instanceof  CSVar csVar) {
+            if (entry.pointer() instanceof CSVar csVar) {
+                Context c = csVar.getContext();
                 Var var = csVar.getVar();
-                for (CSObj obj: delta) {
-
-                    // Store Field
-                    for (StoreField field: var.getStoreFields()) {
-                        if (field.isStatic()) {
-                            addPFGEdge(
-                                    csManager.getCSVar(csVar.getContext(), var),
-                                    csManager.getStaticField(field.getFieldRef().resolve())
-                            );
+                for (CSObj csObj : delta) {
+                    for (StoreField stmt : var.getStoreFields()) {
+                        if (stmt.isStatic()) {
+                            addPFGEdge(csManager.getCSVar(c, stmt.getRValue()), csManager.getStaticField(stmt.getFieldRef().resolve()));
                         } else {
-                            addPFGEdge(
-                                    csManager.getCSVar(csVar.getContext(), var),
-                                    csManager.getInstanceField(obj, field.getFieldRef().resolve())
-                            );
+                            addPFGEdge(csManager.getCSVar(c, stmt.getRValue()), csManager.getInstanceField(csObj, stmt.getFieldRef().resolve()));
                         }
                     }
 
-                    // Load Field
-                    for (LoadField field: var.getLoadFields()) {
-                        if (field.isStatic()) {
-                            addPFGEdge(
-                                    csManager.getStaticField(field.getFieldRef().resolve()),
-                                    csManager.getCSVar(csVar.getContext(), var)
-                            );
+                    for (LoadField stmt : var.getLoadFields()) {
+                        if (stmt.isStatic()) {
+                            addPFGEdge(csManager.getStaticField(stmt.getFieldRef().resolve()), csManager.getCSVar(c, stmt.getLValue()));
                         } else {
-                            addPFGEdge(
-                                    csManager.getInstanceField(obj, field.getFieldRef().resolve()),
-                                    csManager.getCSVar(csVar.getContext(), var)
-                            );
+                            addPFGEdge(csManager.getInstanceField(csObj, stmt.getFieldRef().resolve()), csManager.getCSVar(c, stmt.getLValue()));
                         }
                     }
 
-                    // Store Array
-                    for (StoreArray array: var.getStoreArrays()) {
-                        addPFGEdge(
-                                csManager.getCSVar(csVar.getContext(), var),
-                                csManager.getArrayIndex(obj)
-                        );
+                    for (StoreArray stmt : var.getStoreArrays()) {
+                        addPFGEdge(csManager.getCSVar(c, stmt.getRValue()), csManager.getArrayIndex(csObj));
                     }
 
-                    // Load Array
-                    for (LoadArray array: var.getLoadArrays()) {
-                        addPFGEdge(
-                                csManager.getArrayIndex(obj),
-                                csManager.getCSVar(csVar.getContext(), var)
-                        );
+                    for (LoadArray stmt : var.getLoadArrays()) {
+                        addPFGEdge(csManager.getArrayIndex(csObj), csManager.getCSVar(c, stmt.getLValue()));
                     }
 
-                    processCall(csVar, obj);
+                    processCall(csVar, csObj);
                 }
             }
         }
