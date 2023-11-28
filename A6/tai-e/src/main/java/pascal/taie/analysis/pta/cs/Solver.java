@@ -264,7 +264,72 @@ class Solver {
      * Processes work-list entries until the work-list is empty.
      */
     private void analyze() {
-        // TODO - finish me
+        while (!workList.isEmpty()) {
+            WorkList.Entry entry = workList.pollEntry();
+
+            // Δ = pts – pt(n)
+            PointsToSet delta = propagate(entry.pointer(), entry.pointsToSet());
+
+            if (entry.pointer() instanceof  CSVar csVar) {
+                Var var = csVar.getVar();
+                for (CSObj obj: delta) {
+
+                    // Store Field
+                    for (StoreField field: var.getStoreFields()) {
+                        if (field.isStatic()) {
+                            // add edge (y, T.f)
+                            addPFGEdge(
+                                    csManager.getCSVar(csVar.getContext(), var),
+                                    csManager.getStaticField(field.getFieldRef().resolve())
+                            );
+                        } else {
+                            // add edge (y, oi.f)
+                            addPFGEdge(
+                                    csManager.getCSVar(csVar.getContext(), var),
+                                    csManager.getInstanceField(obj, field.getFieldRef().resolve())
+                            );
+                        }
+                    }
+
+                    // Load Field
+                    for (LoadField field: var.getLoadFields()) {
+                        if (field.isStatic()) {
+                            // add edge (T.f, y)
+                            addPFGEdge(
+                                    csManager.getStaticField(field.getFieldRef().resolve()),
+                                    csManager.getCSVar(csVar.getContext(), var)
+                            );
+                        } else {
+                            // add edge (oi.f, y)
+                            addPFGEdge(
+                                    csManager.getInstanceField(obj, field.getFieldRef().resolve()),
+                                    csManager.getCSVar(csVar.getContext(), var)
+                            );
+                        }
+                    }
+
+                    // Store Array
+                    for (StoreArray array: var.getStoreArrays()) {
+                        // add edge Ou[*] <- y
+                        addPFGEdge(
+                                csManager.getCSVar(csVar.getContext(), var),
+                                csManager.getArrayIndex(obj)
+                        );
+                    }
+
+                    // Load Array
+                    for (LoadArray array: var.getLoadArrays()) {
+                        // add edge y <- Ou[*]
+                        addPFGEdge(
+                                csManager.getArrayIndex(obj),
+                                csManager.getCSVar(csVar.getContext(), var)
+                        );
+                    }
+
+                    processCall(csVar, obj);
+                }
+            }
+        }
     }
 
     /**
@@ -315,8 +380,8 @@ class Solver {
             if (callGraph.addEdge(new Edge<>(
                     CallGraphs.getCallKind(invoke),
                     csManager.getCSCallSite(recv.getContext(), invoke),
-                    csManager.getCSMethod(ct, m)
-            ))) {
+                    csManager.getCSMethod(ct, m))))
+            {
                 addReachable(csManager.getCSMethod(ct, m));
 
                 for (int i = 0; i < m.getParamCount(); ++i) {
