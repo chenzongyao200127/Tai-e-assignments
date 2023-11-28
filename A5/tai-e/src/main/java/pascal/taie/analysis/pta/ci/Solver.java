@@ -360,7 +360,10 @@ class Solver {
             JMethod m = resolveCallee(recv, invoke);
 
             // add <m_this, {oi}> to WL
-            workList.addEntry(pointerFlowGraph.getVarPtr(m.getIR().getThis()), new PointsToSet(recv));
+            workList.addEntry(
+                    pointerFlowGraph.getVarPtr(m.getIR().getThis()),
+                    new PointsToSet(recv)
+            );
 
             if (callGraph.addEdge(new Edge<>(CallGraphs.getCallKind(invoke), invoke, m))) {
                 addReachable(m);

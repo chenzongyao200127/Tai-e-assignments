@@ -296,7 +296,48 @@ class Solver {
      * @param recvObj set of new discovered objects pointed by the variable.
      */
     private void processCall(CSVar recv, CSObj recvObj) {
-        // TODO - finish me
+        for (Invoke invoke: recv.getVar().getInvokes()) {
+            // Dispatch method
+            JMethod m = resolveCallee(recvObj, invoke);
+
+            // get new Context: ct
+            Context ct = contextSelector.selectContext(
+                    csManager.getCSCallSite(recv.getContext(), invoke), recvObj, m
+            );
+
+            // add <ct: m_this, c: {oi}> to WL
+            workList.addEntry(
+                    csManager.getCSVar(ct, m.getIR().getThis()),
+                    PointsToSetFactory.make(recvObj)
+            );
+
+            // c:l -> ct: m
+            if (callGraph.addEdge(new Edge<>(
+                    CallGraphs.getCallKind(invoke),
+                    csManager.getCSCallSite(recv.getContext(), invoke),
+                    csManager.getCSMethod(ct, m)
+            ))) {
+                addReachable(csManager.getCSMethod(ct, m));
+
+                for (int i = 0; i < m.getParamCount(); ++i) {
+                    Var a = invoke.getInvokeExp().getArg(i);
+                    Var p = m.getIR().getParam(i);
+                    addPFGEdge(
+                            csManager.getCSVar(recv.getContext(), a),
+                            csManager.getCSVar(ct, p)
+                    );
+                }
+                // c:r <- ct: m_ret
+                if (invoke.getResult() != null) {
+                    for (Var ret: m.getIR().getReturnVars()) {
+                        addPFGEdge(
+                                csManager.getCSVar(ct, ret),
+                                csManager.getCSVar(recv.getContext(), invoke.getResult())
+                        );
+                    }
+                }
+            }
+        }
     }
 
     /**
