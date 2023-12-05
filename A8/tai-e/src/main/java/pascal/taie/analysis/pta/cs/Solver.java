@@ -26,22 +26,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pascal.taie.World;
 import pascal.taie.analysis.graph.callgraph.CallGraphs;
-import pascal.taie.analysis.graph.callgraph.CallKind;
 import pascal.taie.analysis.graph.callgraph.Edge;
 import pascal.taie.analysis.pta.PointerAnalysisResult;
 import pascal.taie.analysis.pta.PointerAnalysisResultImpl;
 import pascal.taie.analysis.pta.core.cs.CSCallGraph;
 import pascal.taie.analysis.pta.core.cs.context.Context;
-import pascal.taie.analysis.pta.core.cs.element.ArrayIndex;
-import pascal.taie.analysis.pta.core.cs.element.CSCallSite;
-import pascal.taie.analysis.pta.core.cs.element.CSManager;
-import pascal.taie.analysis.pta.core.cs.element.CSMethod;
-import pascal.taie.analysis.pta.core.cs.element.CSObj;
-import pascal.taie.analysis.pta.core.cs.element.CSVar;
-import pascal.taie.analysis.pta.core.cs.element.InstanceField;
-import pascal.taie.analysis.pta.core.cs.element.MapBasedCSManager;
-import pascal.taie.analysis.pta.core.cs.element.Pointer;
-import pascal.taie.analysis.pta.core.cs.element.StaticField;
+import pascal.taie.analysis.pta.core.cs.element.*;
 import pascal.taie.analysis.pta.core.cs.selector.ContextSelector;
 import pascal.taie.analysis.pta.core.heap.HeapModel;
 import pascal.taie.analysis.pta.core.heap.Obj;
@@ -49,12 +39,14 @@ import pascal.taie.analysis.pta.plugin.taint.TaintAnalysiss;
 import pascal.taie.analysis.pta.pts.PointsToSet;
 import pascal.taie.analysis.pta.pts.PointsToSetFactory;
 import pascal.taie.config.AnalysisOptions;
-import pascal.taie.ir.exp.InvokeExp;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.*;
-import pascal.taie.language.classes.JField;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.type.Type;
+import pascal.taie.util.collection.*;
+
+import java.util.Map;
+import java.util.Set;
 
 public class Solver {
 
@@ -77,6 +69,8 @@ public class Solver {
     private TaintAnalysiss taintAnalysis;
 
     private PointerAnalysisResult result;
+
+    private Map<Pointer, Set<Pair<Pointer, Type>>> taintFlowGraph;
 
     Solver(AnalysisOptions options, HeapModel heapModel,
            ContextSelector contextSelector) {
@@ -109,6 +103,8 @@ public class Solver {
         pointerFlowGraph = new PointerFlowGraph();
         workList = new WorkList();
         taintAnalysis = new TaintAnalysiss(this);
+        // traitFlowGraph
+        taintFlowGraph = Maps.newHybridMap();
         // process program entry, i.e., main method
         Context defContext = contextSelector.getEmptyContext();
         JMethod main = World.get().getMainMethod();
@@ -116,6 +112,37 @@ public class Solver {
         callGraph.addEntryMethod(csMethod);
         addReachable(csMethod);
     }
+
+    /**
+     * Adds an edge to the Taint Flow Graph (TFG) between the given source and target pointers.
+     *
+     * @param source The source pointer of the edge.
+     * @param target The target pointer of the edge.
+     * @param type The type of the edge.
+     */
+    private void addTFGEdge(Pointer source, Pointer target, Type type) {
+        // Adds the edge to the Taint Flow Graph if it's not already present.
+        // 'computeIfAbsent' checks if 'source' is a key in 'taintFlowGraph';
+        // if not, it adds 'source' with a new HybridSet and returns this new set.
+        if (taintFlowGraph.computeIfAbsent(source, pointer -> Sets.newHybridSet()).add(new Pair<>(target, type))) {
+            // Create a new PointsToSet instance.
+            PointsToSet pointsToSet = PointsToSetFactory.make();
+
+            // Iterate over the points-to set of 'source'.
+            // If any object in this set is tainted, add a corresponding taint object to 'pointsToSet'.
+            source.getPointsToSet().forEach(csObj -> {
+                if (taintAnalysis.isTaint(csObj)) {
+                    pointsToSet.addObject(taintAnalysis.getTaintObj(taintAnalysis.getSourceCall(csObj), type));
+                }
+            });
+
+            // If 'pointsToSet' is empty after processing, add it along with 'target' to the work list.
+            if (pointsToSet.isEmpty()) {
+                workList.addEntry(target, pointsToSet);
+            }
+        }
+    }
+
 
     /**
      * Processes new reachable context-sensitive method.
@@ -216,14 +243,18 @@ public class Solver {
          */
         @Override
         public Void visit(Invoke stmt) {
+            // Check if the invoked statement is a static method call.
             if (stmt.isStatic()) {
                 // Resolve the method being called.
                 JMethod method = resolveCallee(null, stmt);
+
                 // Select a context for the call.
                 Context ct = contextSelector.selectContext(
                         csManager.getCSCallSite(context, stmt),
                         method
                 );
+
+                // Attempt to add an edge to the call graph for this invocation.
                 if (callGraph.addEdge(new Edge<>(
                         CallGraphs.getCallKind(stmt),
                         csManager.getCSCallSite(context, stmt),
@@ -232,16 +263,29 @@ public class Solver {
                     // If the method is successfully added to the call graph,
                     // handle the method's arguments and return values.
                     addReachable(csManager.getCSMethod(ct, method));
+
                     // Iterate over each argument of the invoked method.
                     for (int i = 0; i < method.getParamCount(); ++i) {
                         Var a = stmt.getInvokeExp().getArg(i);
                         Var p = method.getIR().getParam(i);
-                        // Create a PFG edge from each actual argument to the corresponding formal parameter.
+
+                        // Create a Program Flow Graph (PFG) edge from each actual argument to the corresponding formal parameter.
                         addPFGEdge(
                                 csManager.getCSVar(context, a),
                                 csManager.getCSVar(ct, p)
                         );
+
+                        // Process Source Call: Handle taint flow from arguments to the result, if the method returns a value.
+                        if (stmt.getResult() != null) {
+                            taintAnalysis.getArgsToResultTransfers(method, i).forEach(returnType -> {
+                                addTFGEdge(
+                                        csManager.getCSVar(context, a),
+                                        csManager.getCSVar(context, stmt.getResult()),
+                                        returnType);
+                            });
+                        }
                     }
+
                     // If the invoked method has a return value, handle the return variables.
                     if (stmt.getResult() != null) {
                         for (Var ret : method.getIR().getReturnVars()) {
@@ -251,11 +295,22 @@ public class Solver {
                                     csManager.getCSVar(context, stmt.getResult())
                             );
                         }
+
+                        // For each taint source type in the method, add an entry to the work list.
+                        taintAnalysis.getSources(method).forEach(type -> {
+                            workList.addEntry(
+                                    csManager.getCSVar(context, stmt.getResult()),
+                                    PointsToSetFactory.make(taintAnalysis.getTaintObj(stmt, type))
+                            );
+                        });
                     }
                 }
             }
+
+            // Continue with the standard visitation process for this statement.
             return StmtVisitor.super.visit(stmt);
         }
+
 
         /**
          * Default visit method for statements that do not match any specific type.
@@ -379,6 +434,24 @@ public class Solver {
                 // also add it to the delta set.
                 if (pointer.getPointsToSet().addObject(obj)) {
                     delta.addObject(obj);
+
+                    // Check if the object 'obj' is tainted according to the taint analysis.
+                    if (taintAnalysis.isTaint(obj)) {
+                        // Retrieve the set of transfers associated with 'pointer' in the taint flow graph.
+                        // 'getOrDefault' is used to handle the case where 'pointer' has no associated transfers.
+                        taintFlowGraph.getOrDefault(pointer, Set.of()).forEach(transfer -> {
+                            // For each transfer, add an entry to the work list.
+                            // This entry includes the first element of the transfer (likely a target pointer)
+                            // and a points-to set created for the taint object associated with 'obj'.
+                            workList.addEntry(
+                                    transfer.first(),
+                                    PointsToSetFactory.make(
+                                            taintAnalysis.getTaintObj(taintAnalysis.getSourceCall(obj),
+                                            transfer.second())
+                                    )
+                            );
+                        });
+                    }
                 }
             }
 
@@ -399,6 +472,7 @@ public class Solver {
      * @param recvObj set of new discovered objects pointed by the variable.
      */
     private void processCall(CSVar recv, CSObj recvObj) {
+        Context context = recv.getContext();
         // Iterate over all method invocations associated with the receiver variable
         for (Invoke invoke : recv.getVar().getInvokes()) {
             // Resolve the method being called
@@ -419,7 +493,8 @@ public class Solver {
             if (callGraph.addEdge(new Edge<>(
                     CallGraphs.getCallKind(invoke),
                     csManager.getCSCallSite(recv.getContext(), invoke),
-                    csManager.getCSMethod(ct, m)))) {
+                    csManager.getCSMethod(ct, m))))
+            {
 
                 // Mark the called method as reachable
                 addReachable(csManager.getCSMethod(ct, m));
@@ -432,6 +507,26 @@ public class Solver {
                             csManager.getCSVar(recv.getContext(), a),
                             csManager.getCSVar(ct, p)
                     );
+
+                    // Process Taint Transfer (Args to Base)
+                    taintAnalysis.getArgsToBaseTransfers(m, i).forEach(type -> {
+                        addTFGEdge(
+                                csManager.getCSVar(context, a),
+                                recv,
+                                type
+                        );
+                    });
+
+                    // Process Taint Transfer (Args to Result)
+                    if (invoke.getResult() != null) {
+                        taintAnalysis.getArgsToResultTransfers(m, i).forEach(type -> {
+                            addTFGEdge(
+                                    csManager.getCSVar(context, a),
+                                    csManager.getCSVar(context, invoke.getResult()),
+                                    type
+                            );
+                        });
+                    }
                 }
 
                 // If the invoked method has a return value, create PFG edges for the return value
@@ -442,6 +537,23 @@ public class Solver {
                                 csManager.getCSVar(recv.getContext(), invoke.getResult())
                         );
                     }
+
+                    // Process Taint Transfer (Base to Result)
+                    taintAnalysis.getBaseToResultTransfers(m).forEach(type -> {
+                        addTFGEdge(
+                                recv,
+                                csManager.getCSVar(context, invoke.getResult()),
+                                type
+                        );
+                    });
+
+                    // Add new TaintObj to workList
+                    taintAnalysis.getSources(m).forEach(type -> {
+                        workList.addEntry(
+                                csManager.getCSVar(context, invoke.getResult()),
+                                PointsToSetFactory.make(taintAnalysis.getTaintObj(invoke, type))
+                        );
+                    });
                 }
             }
         }
