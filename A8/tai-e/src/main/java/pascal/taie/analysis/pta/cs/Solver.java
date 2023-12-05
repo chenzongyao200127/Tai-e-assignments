@@ -51,14 +51,7 @@ import pascal.taie.analysis.pta.pts.PointsToSetFactory;
 import pascal.taie.config.AnalysisOptions;
 import pascal.taie.ir.exp.InvokeExp;
 import pascal.taie.ir.exp.Var;
-import pascal.taie.ir.stmt.Copy;
-import pascal.taie.ir.stmt.Invoke;
-import pascal.taie.ir.stmt.LoadArray;
-import pascal.taie.ir.stmt.LoadField;
-import pascal.taie.ir.stmt.New;
-import pascal.taie.ir.stmt.StmtVisitor;
-import pascal.taie.ir.stmt.StoreArray;
-import pascal.taie.ir.stmt.StoreField;
+import pascal.taie.ir.stmt.*;
 import pascal.taie.language.classes.JField;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.type.Type;
@@ -128,8 +121,22 @@ public class Solver {
      * Processes new reachable context-sensitive method.
      */
     private void addReachable(CSMethod csMethod) {
-        // TODO - finish me
+        // Attempt to add the given context-sensitive method to the call graph.
+        // If the method is successfully added (i.e., it was not already present),
+        // then proceed to process its statements.
+        if (callGraph.addReachableMethod(csMethod)) {
+            // Iterate over each statement in the Intermediate Representation (IR)
+            // of the method's body.
+            for (Stmt stmt: csMethod.getMethod().getIR().getStmts()) {
+                // For each statement, apply a processing routine encapsulated
+                // within the StmtProcessor class. This routine likely performs
+                // operations specific to each statement in the context of the
+                // given method.
+                stmt.accept(new StmtProcessor(csMethod));
+            }
+        }
     }
+
 
     /**
      * Processes the statements in context-sensitive new reachable methods.
@@ -137,39 +144,252 @@ public class Solver {
     private class StmtProcessor implements StmtVisitor<Void> {
 
         private final CSMethod csMethod;
-
         private final Context context;
 
+        // Constructor for StmtProcessor
         private StmtProcessor(CSMethod csMethod) {
             this.csMethod = csMethod;
             this.context = csMethod.getContext();
         }
 
-        // TODO - if you choose to implement addReachable()
-        //  via visitor pattern, then finish me
+        /**
+         * Process 'New' statements.
+         */
+        @Override
+        public Void visit(New stmt) {
+            // Obtain an object from the heap model corresponding to the statement.
+            Obj obj = heapModel.getObj(stmt);
+            // Add an entry to the worklist for processing.
+            // This involves creating a points-to set for the left value of the statement.
+            workList.addEntry(
+                    csManager.getCSVar(context, stmt.getLValue()),
+                    PointsToSetFactory.make(csManager.getCSObj(contextSelector.selectHeapContext(csMethod, obj), obj))
+            );
+            return StmtVisitor.super.visit(stmt);
+        }
+
+        /**
+         * Process 'Copy' statements.
+         */
+        @Override
+        public Void visit(Copy stmt) {
+            // Create a points-from-graph (PFG) edge between the right and left values of the statement.
+            addPFGEdge(
+                    csManager.getCSVar(context, stmt.getRValue()),
+                    csManager.getCSVar(context, stmt.getLValue())
+            );
+            return StmtVisitor.super.visit(stmt);
+        }
+
+        /**
+         * Process 'Static Store Field' statements.
+         */
+        @Override
+        public Void visit(StoreField stmt) {
+            if (stmt.isStatic()) {
+                // For static field assignments, create a PFG edge from the right value to the resolved static field.
+                addPFGEdge(
+                        csManager.getCSVar(context, stmt.getRValue()),
+                        csManager.getStaticField(stmt.getFieldRef().resolve())
+                );
+            }
+            return StmtVisitor.super.visit(stmt);
+        }
+
+        /**
+         * Process 'Static Load Field' statements.
+         */
+        @Override
+        public Void visit(LoadField stmt) {
+            if (stmt.isStatic()) {
+                // For static field loads, create a PFG edge from the static field to the left value.
+                addPFGEdge(
+                        csManager.getStaticField(stmt.getFieldRef().resolve()),
+                        csManager.getCSVar(context, stmt.getLValue())
+                );
+            }
+            return StmtVisitor.super.visit(stmt);
+        }
+
+        /**
+         * Process 'Static Method Invoke' statements.
+         */
+        @Override
+        public Void visit(Invoke stmt) {
+            if (stmt.isStatic()) {
+                // Resolve the method being called.
+                JMethod method = resolveCallee(null, stmt);
+                // Select a context for the call.
+                Context ct = contextSelector.selectContext(
+                        csManager.getCSCallSite(context, stmt),
+                        method
+                );
+                if (callGraph.addEdge(new Edge<>(
+                        CallGraphs.getCallKind(stmt),
+                        csManager.getCSCallSite(context, stmt),
+                        csManager.getCSMethod(ct, method)
+                ))) {
+                    // If the method is successfully added to the call graph,
+                    // handle the method's arguments and return values.
+                    addReachable(csManager.getCSMethod(ct, method));
+                    // Iterate over each argument of the invoked method.
+                    for (int i = 0; i < method.getParamCount(); ++i) {
+                        Var a = stmt.getInvokeExp().getArg(i);
+                        Var p = method.getIR().getParam(i);
+                        // Create a PFG edge from each actual argument to the corresponding formal parameter.
+                        addPFGEdge(
+                                csManager.getCSVar(context, a),
+                                csManager.getCSVar(ct, p)
+                        );
+                    }
+                    // If the invoked method has a return value, handle the return variables.
+                    if (stmt.getResult() != null) {
+                        for (Var ret : method.getIR().getReturnVars()) {
+                            // Create PFG edges from each return variable of the method to the invoke statement's result.
+                            addPFGEdge(
+                                    csManager.getCSVar(ct, ret),
+                                    csManager.getCSVar(context, stmt.getResult())
+                            );
+                        }
+                    }
+                }
+            }
+            return StmtVisitor.super.visit(stmt);
+        }
+
+        /**
+         * Default visit method for statements that do not match any specific type.
+         * Delegates to the default implementation in the superclass.
+         */
+        @Override
+        public Void visitDefault(Stmt stmt) {
+            return StmtVisitor.super.visitDefault(stmt);
+        }
     }
 
-    /**
-     * Adds an edge "source -> target" to the PFG.
+    /*
+     * Adds an edge "source -> target" to the PFG (Pointer Flow Graph).
      */
     private void addPFGEdge(Pointer source, Pointer target) {
-        // TODO - finish me
+        // Attempts to add an edge from the source pointer to the target pointer in the pointer flow graph.
+        // The addEdge method returns true if the edge was successfully added.
+        if (pointerFlowGraph.addEdge(source, target)) {
+            // Check if the points-to set of the source pointer is not empty.
+            // The points-to set represents all the memory locations the pointer can point to.
+            if (!source.getPointsToSet().isEmpty()) {
+                // If the points-to set is not empty, add an entry to the workList.
+                // This entry is for further processing, indicating that the target pointer may now point to
+                // new locations as indicated by the source's points-to set.
+                workList.addEntry(target, source.getPointsToSet());
+            }
+        }
     }
 
     /**
      * Processes work-list entries until the work-list is empty.
      */
     private void analyze() {
-        // TODO - finish me
+        // Loop until the work list is empty.
+        while (!workList.isEmpty()) {
+            // Poll an entry from the work list.
+            WorkList.Entry entry = workList.pollEntry();
+
+            // Propagate the points-to set for the current pointer.
+            PointsToSet delta = propagate(entry.pointer(), entry.pointsToSet());
+
+            // Check if the pointer is an instance of CSVar.
+            if (entry.pointer() instanceof CSVar csVar) {
+                // Retrieve context and variable from csVar.
+                Context c = csVar.getContext();
+                Var var = csVar.getVar();
+
+                // Process each object in the delta points-to set.
+                for (CSObj csObj : delta) {
+                    // Handle store field statements for the variable.
+                    for (StoreField stmt : var.getStoreFields()) {
+                        // Add an edge for static fields.
+                        if (stmt.isStatic()) {
+                            addPFGEdge(
+                                    csManager.getCSVar(c, stmt.getRValue()),
+                                    csManager.getStaticField(stmt.getFieldRef().resolve())
+                            );
+                        } else {
+                            // Add an edge for instance fields.
+                            addPFGEdge(
+                                    csManager.getCSVar(c, stmt.getRValue()),
+                                    csManager.getInstanceField(csObj, stmt.getFieldRef().resolve())
+                            );
+                        }
+                    }
+
+                    // Handle load field statements for the variable.
+                    for (LoadField stmt : var.getLoadFields()) {
+                        // Add an edge for static fields.
+                        if (stmt.isStatic()) {
+                            addPFGEdge(
+                                    csManager.getStaticField(stmt.getFieldRef().resolve()),
+                                    csManager.getCSVar(c, stmt.getLValue())
+                            );
+                        } else {
+                            // Add an edge for instance fields.
+                            addPFGEdge(
+                                    csManager.getInstanceField(csObj, stmt.getFieldRef().resolve()),
+                                    csManager.getCSVar(c, stmt.getLValue())
+                            );
+                        }
+                    }
+
+                    // Process store array statements.
+                    for (StoreArray stmt : var.getStoreArrays()) {
+                        addPFGEdge(
+                                csManager.getCSVar(c, stmt.getRValue()),
+                                csManager.getArrayIndex(csObj)
+                        );
+                    }
+
+                    // Process load array statements.
+                    for (LoadArray stmt : var.getLoadArrays()) {
+                        addPFGEdge(
+                                csManager.getArrayIndex(csObj),
+                                csManager.getCSVar(c, stmt.getLValue())
+                        );
+                    }
+
+                    // Process method calls.
+                    processCall(csVar, csObj);
+                }
+            }
+        }
     }
+
 
     /**
      * Propagates pointsToSet to pt(pointer) and its PFG successors,
      * returns the difference set of pointsToSet and pt(pointer).
      */
     private PointsToSet propagate(Pointer pointer, PointsToSet pointsToSet) {
-        // TODO - finish me
-        return null;
+        // Create a new, empty PointsToSet named 'delta'. This set will track the changes (new objects added) to the pointer's points-to set.
+        PointsToSet delta = PointsToSetFactory.make();
+
+        // Check if the provided pointsToSet is not empty.
+        if (!pointsToSet.isEmpty()) {
+            // Iterate through each CSObj (context-sensitive object) in the pointsToSet.
+            for (CSObj obj : pointsToSet) {
+                // Add each object to the pointer's points-to set. If the object is new to the set (i.e., addObject returns true),
+                // also add it to the delta set.
+                if (pointer.getPointsToSet().addObject(obj)) {
+                    delta.addObject(obj);
+                }
+            }
+
+            // For each successor of the pointer in the pointer flow graph, add an entry to the worklist.
+            // This entry consists of the successor and the delta set, indicating that these successors might be affected
+            // by the changes in the pointer's points-to set.
+            pointerFlowGraph.getSuccsOf(pointer).forEach(s -> workList.addEntry(s, delta));
+        }
+
+        // Return the delta set, which represents the changes to the pointer's points-to set as a result of this propagation.
+        return delta;
     }
 
     /**
@@ -179,8 +399,54 @@ public class Solver {
      * @param recvObj set of new discovered objects pointed by the variable.
      */
     private void processCall(CSVar recv, CSObj recvObj) {
-        // TODO - finish me
+        // Iterate over all method invocations associated with the receiver variable
+        for (Invoke invoke : recv.getVar().getInvokes()) {
+            // Resolve the method being called
+            JMethod m = resolveCallee(recvObj, invoke);
+
+            // Select the context for this method invocation
+            Context ct = contextSelector.selectContext(
+                    csManager.getCSCallSite(recv.getContext(), invoke), recvObj, m
+            );
+
+            // Add the context and method to the work list for further processing
+            workList.addEntry(
+                    csManager.getCSVar(ct, m.getIR().getThis()),
+                    PointsToSetFactory.make(recvObj)
+            );
+
+            // Add an edge to the call graph representing this method call
+            if (callGraph.addEdge(new Edge<>(
+                    CallGraphs.getCallKind(invoke),
+                    csManager.getCSCallSite(recv.getContext(), invoke),
+                    csManager.getCSMethod(ct, m)))) {
+
+                // Mark the called method as reachable
+                addReachable(csManager.getCSMethod(ct, m));
+
+                // For each argument of the method, create a Program Flow Graph (PFG) edge
+                for (int i = 0; i < m.getParamCount(); ++i) {
+                    Var a = invoke.getInvokeExp().getArg(i);
+                    Var p = m.getIR().getParam(i);
+                    addPFGEdge(
+                            csManager.getCSVar(recv.getContext(), a),
+                            csManager.getCSVar(ct, p)
+                    );
+                }
+
+                // If the invoked method has a return value, create PFG edges for the return value
+                if (invoke.getResult() != null) {
+                    for (Var ret : m.getIR().getReturnVars()) {
+                        addPFGEdge(
+                                csManager.getCSVar(ct, ret),
+                                csManager.getCSVar(recv.getContext(), invoke.getResult())
+                        );
+                    }
+                }
+            }
+        }
     }
+
 
     /**
      * Resolves the callee of a call site with the receiver object.
