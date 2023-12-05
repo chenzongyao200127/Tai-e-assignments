@@ -137,7 +137,7 @@ public class Solver {
             });
 
             // If 'pointsToSet' is empty after processing, add it along with 'target' to the work list.
-            if (pointsToSet.isEmpty()) {
+            if (!pointsToSet.isEmpty()) {
                 workList.addEntry(target, pointsToSet);
             }
         }
