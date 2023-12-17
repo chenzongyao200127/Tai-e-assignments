@@ -55,27 +55,6 @@ public class ConstantPropagation extends
         return true;
     }
 
-    // 需要注意的是：在实现 newBoundaryFact() 的时候，
-    // 你要小心地处理每个会被分析的方法的参数。
-    // 具体来说，你要将它们的值初始化为 NAC (请思考：为什么要这么做？)。
-//    @Override
-//    public CPFact newBoundaryFact(CFG<Stmt> cfg) {
-//        CPFact cpFact = new CPFact();
-//        for (Stmt exp : cfg) {
-//            if (exp instanceof DefinitionStmt<?, ?>) {
-//                LValue v = ((DefinitionStmt<?, ?>) exp).getLValue();
-//
-//                assert v != null;
-//                if (!ConstantPropagation.canHoldInt((Var) v)) {
-//                    continue;
-//                }
-//
-//                cpFact.update((Var) v, Value.getNAC());
-//            }
-//        }
-//
-//        return cpFact;
-//    }
     @Override
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
         CPFact fact = new CPFact();
@@ -91,20 +70,6 @@ public class ConstantPropagation extends
     public CPFact newInitialFact() {
         return new CPFact();
     }
-
-//    @Override
-//    public void meetInto(CPFact fact, CPFact target) {
-//        Set<Var> varsToMerge = fact.keySet();
-//        Set<Var> varsInTarget = target.keySet();
-//
-//        for (Var v: varsToMerge) {
-//            if (!varsInTarget.contains(v)) {
-//                target.update(v, fact.get(v));
-//            } else {
-//                target.update(v, meetValue(fact.get(v), target.get(v)));
-//            }
-//        }
-//    }
 
     @Override
     public void meetInto(CPFact fact, CPFact target) {
@@ -144,33 +109,6 @@ public class ConstantPropagation extends
         return Value.getNAC();
     }
 
-
-//    @Override
-//    public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
-//        AtomicBoolean changed = new AtomicBoolean(false);
-//
-//        // Update out with values from in, set changed if any updates were made
-//        in.forEach((var, value) -> {
-//            if (out.update(var, value)) {
-//                changed.set(true);
-//            }
-//        });
-//
-//        // Handle DefinitionStmt
-//        if (stmt instanceof DefinitionStmt<?, ?> s && s.getLValue() instanceof Var var && canHoldInt(var)) {
-//            Value originalVal = out.get(var);           // Get the original value of var in out
-//            Value newVal = evaluate(s.getRValue(), in); // Evaluate the right-hand side of the statement
-//            out.update(var, newVal);                    // Update out with the new value
-//
-//            // Check if newVal is different from the original value of var in out
-//            if (originalVal == null || !originalVal.equals(newVal)) {
-//                changed.set(true);
-//            }
-//        }
-//
-//        return changed.get();
-//    }
-
     // OUT[B] = genB U (IN[B] - killB);
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
@@ -204,108 +142,6 @@ public class ConstantPropagation extends
         }
         return false;
     }
-
-//    /**
-//     * Evaluates the {@link Value} of given expression.
-//     * 这个方法会计算表达式（Exp）的值（Value）。当然，此处的值是格上的抽象值。
-//     * 你需要参考第 6 讲课件的第 247 页上的内容来实现它的三种情况。
-//     * 对于其它情况，该方法会像我们在第 2.1 节提到的那样返回 NAC。
-//     * 你应该在 transferNode() 方法中调用它来进行表达式的求值。
-//     *
-//     * @param exp the expression to be evaluated
-//     * @param in  IN fact of the statement
-//     * @return the resulting {@link Value}
-//     */
-//    // 还是有BUG
-//    public static Value evaluate(Exp exp, CPFact in) {
-//        // x = c (c is constant)
-//        if (exp instanceof IntLiteral c) {
-//            return Value.makeConstant(c.getValue());
-//
-//            // x = y op z
-//        } else if (exp instanceof BinaryExp binaryExp) {
-//            Var v1 = binaryExp.getOperand1();
-//            Var v2 = binaryExp.getOperand2();
-//            Value v1Value = in.get(v1);
-//            Value v2Value = in.get(v2);
-//
-//            // Check for null or NAC values
-//            if (v1Value == null || v2Value == null || v1Value.isNAC() || v2Value.isNAC()) {
-//                return Value.getNAC();
-//            }
-//
-//            // Check if both values are constants
-//            if (!v1Value.isConstant() || !v2Value.isConstant()) {
-//                return Value.getNAC();
-//            }
-//
-//            int val1 = v1Value.getConstant();
-//            int val2 = v2Value.getConstant();
-//
-//            // Handle different types of binary expressions
-//            if (binaryExp instanceof ArithmeticExp) {
-//                ArithmeticExp.Op op = ((ArithmeticExp) binaryExp).getOperator();
-//                String opStr = op.toString();
-//
-//                // Division or modulo by zero results in UNDEF
-//                if (("/".equals(opStr) || "%".equals(opStr)) && val2 == 0) {
-//                    return Value.getUndef();
-//                }
-//
-//                return switch (opStr) {
-//                    case "+" -> Value.makeConstant(val1 + val2);
-//                    case "-" -> Value.makeConstant(val1 - val2);
-//                    case "*" -> Value.makeConstant(val1 * val2);
-//                    case "/" -> Value.makeConstant(val1 / val2);
-//                    case "%" -> Value.makeConstant(val1 % val2);
-//                    default -> throw new IllegalStateException("Unsupported arithmetic operator: " + opStr);
-//                };
-//
-//            } else if (binaryExp instanceof ConditionExp) {
-//                ConditionExp.Op op = ((ConditionExp) binaryExp).getOperator();
-//                String opStr = op.toString();
-//
-//                return switch (opStr) {
-//                    case "<=" -> val1 <= val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-//                    case "<" -> val1 < val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-//                    case ">" -> val1 > val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-//                    case ">=" -> val1 >= val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-//                    case "==" -> val1 == val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-//                    case "!=" -> val1 != val2 ? Value.makeConstant(1) : Value.makeConstant(0);
-//                    default -> throw new IllegalStateException("Unsupported conditional operator: " + opStr);
-//                };
-//
-//            } else if (binaryExp instanceof ShiftExp) {
-//                ShiftExp.Op op = ((ShiftExp) binaryExp).getOperator();
-//                String opStr = op.toString();
-//
-//                return switch (opStr) {
-//                    case "<<" -> Value.makeConstant(val1 << val2);
-//                    case ">>" -> Value.makeConstant(val1 >> val2);
-//                    case ">>>" -> Value.makeConstant(val1 >>> val2);
-//                    default -> throw new IllegalStateException("Unsupported shift operator: " + opStr);
-//                };
-//
-//            } else if (binaryExp instanceof BitwiseExp) {
-//                BitwiseExp.Op op = ((BitwiseExp) binaryExp).getOperator();
-//                String opStr = op.toString();
-//
-//                return switch (opStr) {
-//                    case "|" -> Value.makeConstant(val1 | val2);
-//                    case "^" -> Value.makeConstant(val1 ^ val2);
-//                    case "&" -> Value.makeConstant(val1 & val2);
-//                    default -> throw new IllegalStateException("Unsupported bitwise operator: " + opStr);
-//                };
-//            } else {
-//                return Value.getNAC();
-//            }
-//        // x = v
-//        } else if (exp instanceof Var v) {
-//            return in.get(v);
-//        } else {
-//            return Value.getNAC();
-//        }
-//    }
 
     public static Value evaluate(Exp exp, CPFact in) {
         if (exp instanceof IntLiteral intExp) {

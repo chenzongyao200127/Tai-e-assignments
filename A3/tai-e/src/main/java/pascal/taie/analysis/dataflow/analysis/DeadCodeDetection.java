@@ -110,36 +110,64 @@ public class DeadCodeDetection extends MethodAnalysis {
         return deadCode;
     }
 
+    /**
+     * Adds successors of a given statement to a queue based on the value of a conditional expression.
+     * @param cond The conditional expression's value.
+     * @param cfg The control flow graph.
+     * @param stmt The statement being evaluated.
+     * @param queue The queue to which the successors are added.
+     */
     private void addConditionalSuccessorsToQueue(Value cond, CFG<Stmt> cfg, Stmt stmt, Queue<Stmt> queue) {
+        // Check if the condition is a constant value.
         if (cond.isConstant()) {
+            // Iterate over the outgoing edges from the current statement in the CFG.
             for (Edge<Stmt> edge : cfg.getOutEdgesOf(stmt)) {
+                // Determine if the current edge corresponds to the true branch of the condition.
                 boolean isTrueBranch = cond.getConstant() == 1 && edge.getKind() == Edge.Kind.IF_TRUE;
+                // Determine if the current edge corresponds to the false branch of the condition.
                 boolean isFalseBranch = cond.getConstant() == 0 && edge.getKind() == Edge.Kind.IF_FALSE;
+                // If the edge matches the branch indicated by the condition, add its target to the queue.
                 if (isTrueBranch || isFalseBranch) {
                     queue.add(edge.getTarget());
                 }
             }
         } else {
+            // If the condition is not a constant, add all successor statements of the current statement to the queue.
             queue.addAll(cfg.getSuccsOf(stmt));
         }
     }
 
+    /**
+     * Adds successors of a switch statement to a queue based on the value of the switch expression.
+     * @param val The value of the switch expression.
+     * @param cfg The control flow graph.
+     * @param stmt The current statement in the CFG.
+     * @param s The switch statement.
+     * @param queue The queue to which the successors are added.
+     */
     private void addSwitchSuccessorsToQueue(Value val, CFG<Stmt> cfg, Stmt stmt, SwitchStmt s, Queue<Stmt> queue) {
+        // Check if the switch value is a constant.
         if (val.isConstant()) {
             boolean hit = false;
+            // Iterate over the switch statement's case targets.
             for (Pair<Integer, Stmt> pair : s.getCaseTargets()) {
+                // Check if the switch value matches the current case value.
                 if (pair.first() == val.getConstant()) {
                     hit = true;
+                    // If a match is found, add the corresponding statement to the queue.
                     queue.add(pair.second());
                 }
             }
+            // If no matching case is found, add the default case's target to the queue.
             if (!hit) {
                 queue.add(s.getDefaultTarget());
             }
         } else {
+            // If the switch value is not a constant, add all successor statements of the current statement to the queue.
             queue.addAll(cfg.getSuccsOf(stmt));
         }
     }
+
 
 
     /**
