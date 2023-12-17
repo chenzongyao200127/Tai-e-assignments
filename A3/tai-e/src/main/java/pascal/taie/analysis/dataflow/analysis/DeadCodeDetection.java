@@ -44,10 +44,9 @@ import pascal.taie.ir.stmt.AssignStmt;
 import pascal.taie.ir.stmt.If;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.ir.stmt.SwitchStmt;
+import pascal.taie.util.collection.Pair;
 
-import java.util.Comparator;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 
 public class DeadCodeDetection extends MethodAnalysis {
 
@@ -59,20 +58,89 @@ public class DeadCodeDetection extends MethodAnalysis {
 
     @Override
     public Set<Stmt> analyze(IR ir) {
-        // obtain CFG
+        // Obtain the Control Flow Graph (CFG) from the IR.
         CFG<Stmt> cfg = ir.getResult(CFGBuilder.ID);
-        // obtain result of constant propagation
-        DataflowResult<Stmt, CPFact> constants =
-                ir.getResult(ConstantPropagation.ID);
-        // obtain result of live variable analysis
-        DataflowResult<Stmt, SetFact<Var>> liveVars =
-                ir.getResult(LiveVariableAnalysis.ID);
-        // keep statements (dead code) sorted in the resulting set
+
+        // Retrieve results of constant propagation and live variable analysis.
+        DataflowResult<Stmt, CPFact> constants = ir.getResult(ConstantPropagation.ID);
+        DataflowResult<Stmt, SetFact<Var>> liveVars = ir.getResult(LiveVariableAnalysis.ID);
+
+        // Prepare sets for dead code and live code, sorted by statement indices.
         Set<Stmt> deadCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
-        // TODO - finish me
-        // Your task is to recognize dead code in ir and add it to deadCode
+        Set<Stmt> liveCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+
+        // Initialize queue with the entry point of the CFG.
+        Queue<Stmt> queue = new LinkedList<>();
+        queue.add(cfg.getEntry());
+
+        // Process the statements in the queue.
+        while (!queue.isEmpty()) {
+            Stmt stmt = queue.poll();
+
+            // Handle assignment statements and check for dead code.
+            if (stmt instanceof AssignStmt<?, ?> s && s.getLValue() instanceof Var var) {
+                if (!liveVars.getResult(stmt).contains(var) && hasNoSideEffect(s.getRValue())) {
+                    queue.addAll(cfg.getSuccsOf(stmt));
+                    continue;
+                }
+            }
+
+            // Skip already processed live code.
+            if (!liveCode.add(stmt)) {
+                continue;
+            }
+
+            // Handle conditional statements with constant propagation.
+            if (stmt instanceof If s) {
+                Value cond = ConstantPropagation.evaluate(s.getCondition(), constants.getInFact(stmt));
+                addConditionalSuccessorsToQueue(cond, cfg, stmt, queue);
+            } else if (stmt instanceof SwitchStmt s) {
+                Value val = ConstantPropagation.evaluate(s.getVar(), constants.getInFact(stmt));
+                addSwitchSuccessorsToQueue(val, cfg, stmt, s, queue);
+            } else {
+                queue.addAll(cfg.getSuccsOf(stmt));
+            }
+        }
+
+        // Compute dead code by subtracting live code from all nodes, excluding the exit point.
+        deadCode.addAll(cfg.getNodes());
+        deadCode.removeAll(liveCode);
+        deadCode.remove(cfg.getExit());
+
         return deadCode;
     }
+
+    private void addConditionalSuccessorsToQueue(Value cond, CFG<Stmt> cfg, Stmt stmt, Queue<Stmt> queue) {
+        if (cond.isConstant()) {
+            for (Edge<Stmt> edge : cfg.getOutEdgesOf(stmt)) {
+                boolean isTrueBranch = cond.getConstant() == 1 && edge.getKind() == Edge.Kind.IF_TRUE;
+                boolean isFalseBranch = cond.getConstant() == 0 && edge.getKind() == Edge.Kind.IF_FALSE;
+                if (isTrueBranch || isFalseBranch) {
+                    queue.add(edge.getTarget());
+                }
+            }
+        } else {
+            queue.addAll(cfg.getSuccsOf(stmt));
+        }
+    }
+
+    private void addSwitchSuccessorsToQueue(Value val, CFG<Stmt> cfg, Stmt stmt, SwitchStmt s, Queue<Stmt> queue) {
+        if (val.isConstant()) {
+            boolean hit = false;
+            for (Pair<Integer, Stmt> pair : s.getCaseTargets()) {
+                if (pair.first() == val.getConstant()) {
+                    hit = true;
+                    queue.add(pair.second());
+                }
+            }
+            if (!hit) {
+                queue.add(s.getDefaultTarget());
+            }
+        } else {
+            queue.addAll(cfg.getSuccsOf(stmt));
+        }
+    }
+
 
     /**
      * @return true if given RValue has no side effect, otherwise false.
